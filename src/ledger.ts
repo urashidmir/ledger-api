@@ -1,5 +1,10 @@
 import { randomUUID } from "crypto";
-import { Account, AccountOptions } from "./account";
+import {
+  Account,
+  AccountOptions,
+  GetTransactionsOptions,
+  TransactionPage,
+} from "./account";
 import { Transaction, TransactionType } from "./types";
 
 export class UnknownAccountError extends Error {
@@ -42,8 +47,11 @@ export class Ledger {
     return this.getAccountOrThrow(accountId).getBalance();
   }
 
-  getTransactions(accountId: string): Transaction[] {
-    return this.getAccountOrThrow(accountId).getTransactions();
+  getTransactions(
+    accountId: string,
+    options: GetTransactionsOptions = {}
+  ): TransactionPage {
+    return this.getAccountOrThrow(accountId).getTransactions(options);
   }
 
   recordTransaction(

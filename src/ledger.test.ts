@@ -39,8 +39,8 @@ test("recordTransaction, getBalance and getTransactions scope to the given accou
 
   assert.equal(ledger.getBalance(a.id), 100);
   assert.equal(ledger.getBalance(b.id), 5);
-  assert.equal(ledger.getTransactions(a.id).length, 1);
-  assert.equal(ledger.getTransactions(b.id).length, 1);
+  assert.equal(ledger.getTransactions(a.id).transactions.length, 1);
+  assert.equal(ledger.getTransactions(b.id).transactions.length, 1);
 });
 
 test("a withdrawal on one account cannot draw down another account's balance", () => {

@@ -7,12 +7,13 @@ import {
   InvalidAmountError,
   InvalidDescriptionError,
   InvalidIdempotencyKeyError,
+  InvalidPaginationError,
 } from "./account";
 
 test("starts with a zero balance and empty history", () => {
   const account = new Account();
   assert.equal(account.getBalance(), 0);
-  assert.deepEqual(account.getTransactions(), []);
+  assert.deepEqual(account.getTransactions(), { transactions: [], hasMore: false });
 });
 
 test("deposit increases the balance and records a transaction", () => {
@@ -24,7 +25,7 @@ test("deposit increases the balance and records a transaction", () => {
   assert.equal(tx.amount, 100);
   assert.equal(tx.balanceAfter, 100);
   assert.equal(tx.description, "initial");
-  assert.equal(account.getTransactions().length, 1);
+  assert.equal(account.getTransactions().transactions.length, 1);
 });
 
 test("withdrawal decreases the balance", () => {
@@ -45,7 +46,7 @@ test("rejects a withdrawal that exceeds the balance, leaving the balance unchang
     InsufficientFundsError
   );
   assert.equal(account.getBalance(), 10);
-  assert.equal(account.getTransactions().length, 1);
+  assert.equal(account.getTransactions().transactions.length, 1);
 });
 
 test("rejects non-positive or non-finite amounts", () => {
@@ -58,14 +59,14 @@ test("rejects non-positive or non-finite amounts", () => {
     );
   }
   assert.equal(account.getBalance(), 0);
-  assert.equal(account.getTransactions().length, 0);
+  assert.equal(account.getTransactions().transactions.length, 0);
 });
 
 test("getTransactions returns a snapshot, not the live internal array", () => {
   const account = new Account();
   account.recordTransaction("deposit", 10);
 
-  const snapshot = account.getTransactions();
+  const snapshot = account.getTransactions().transactions;
   snapshot.push({
     id: "injected",
     type: "deposit",
@@ -74,7 +75,7 @@ test("getTransactions returns a snapshot, not the live internal array", () => {
     timestamp: new Date().toISOString(),
   });
 
-  assert.equal(account.getTransactions().length, 1);
+  assert.equal(account.getTransactions().transactions.length, 1);
 });
 
 test("evicts the oldest transactions once history exceeds the configured cap, without affecting the balance", () => {
@@ -84,7 +85,7 @@ test("evicts the oldest transactions once history exceeds the configured cap, wi
   account.recordTransaction("deposit", 3);
   account.recordTransaction("deposit", 4);
 
-  const history = account.getTransactions();
+  const { transactions: history } = account.getTransactions();
   assert.equal(history.length, 3);
   assert.equal(history[0].amount, 2);
   assert.equal(history[2].amount, 4);
@@ -97,7 +98,7 @@ test("ring buffer stays in chronological order across multiple wraps", () => {
     account.recordTransaction("deposit", amount);
   }
 
-  const history = account.getTransactions();
+  const { transactions: history } = account.getTransactions();
   assert.deepEqual(
     history.map((tx) => tx.amount),
     [6, 7]
@@ -140,7 +141,7 @@ test("a retried request with the same idempotency key returns the original trans
 
   assert.equal(retry.id, first.id);
   assert.equal(account.getBalance(), 100);
-  assert.equal(account.getTransactions().length, 1);
+  assert.equal(account.getTransactions().transactions.length, 1);
 });
 
 test("reusing an idempotency key with different parameters is rejected", () => {
@@ -152,7 +153,7 @@ test("reusing an idempotency key with different parameters is rejected", () => {
     IdempotencyKeyConflictError
   );
   assert.equal(account.getBalance(), 100);
-  assert.equal(account.getTransactions().length, 1);
+  assert.equal(account.getTransactions().transactions.length, 1);
 });
 
 test("different idempotency keys record independent transactions", () => {
@@ -161,7 +162,7 @@ test("different idempotency keys record independent transactions", () => {
   account.recordTransaction("deposit", 100, undefined, "key-2");
 
   assert.equal(account.getBalance(), 200);
-  assert.equal(account.getTransactions().length, 2);
+  assert.equal(account.getTransactions().transactions.length, 2);
 });
 
 test("rejects an empty idempotency key", () => {
@@ -181,4 +182,100 @@ test("an evicted transaction's idempotency key can be reused once it falls out o
   const tx = account.recordTransaction("deposit", 4, undefined, "key-1");
   assert.equal(tx.amount, 4);
   assert.equal(account.getBalance(), 10);
+});
+
+test("getTransactions defaults to the first page, flagging when more are available", () => {
+  const account = new Account();
+  for (let amount = 1; amount <= 5; amount++) {
+    account.recordTransaction("deposit", amount);
+  }
+
+  const page = account.getTransactions({ limit: 2 });
+  assert.deepEqual(
+    page.transactions.map((tx) => tx.amount),
+    [1, 2]
+  );
+  assert.equal(page.hasMore, true);
+});
+
+test("startingAfter resumes from the transaction after the given id", () => {
+  const account = new Account();
+  const first = account.recordTransaction("deposit", 1);
+  for (let amount = 2; amount <= 5; amount++) {
+    account.recordTransaction("deposit", amount);
+  }
+
+  const page = account.getTransactions({ limit: 2, startingAfter: first.id });
+  assert.deepEqual(
+    page.transactions.map((tx) => tx.amount),
+    [2, 3]
+  );
+  assert.equal(page.hasMore, true);
+});
+
+test("the last page reports hasMore as false", () => {
+  const account = new Account();
+  for (let amount = 1; amount <= 3; amount++) {
+    account.recordTransaction("deposit", amount);
+  }
+
+  const page = account.getTransactions({ limit: 2, startingAfter: undefined });
+  const lastPage = account.getTransactions({
+    limit: 2,
+    startingAfter: page.transactions[page.transactions.length - 1].id,
+  });
+
+  assert.deepEqual(
+    lastPage.transactions.map((tx) => tx.amount),
+    [3]
+  );
+  assert.equal(lastPage.hasMore, false);
+});
+
+test("limit is clamped to the maximum page size rather than rejected", () => {
+  const account = new Account();
+  for (let amount = 1; amount <= 3; amount++) {
+    account.recordTransaction("deposit", amount);
+  }
+
+  const page = account.getTransactions({ limit: 10_000 });
+  assert.equal(page.transactions.length, 3);
+});
+
+test("rejects a non-positive or non-integer limit", () => {
+  const account = new Account();
+  assert.throws(
+    () => account.getTransactions({ limit: 0 }),
+    InvalidPaginationError
+  );
+  assert.throws(
+    () => account.getTransactions({ limit: -1 }),
+    InvalidPaginationError
+  );
+  assert.throws(
+    () => account.getTransactions({ limit: 1.5 }),
+    InvalidPaginationError
+  );
+});
+
+test("rejects a startingAfter id that is not in history", () => {
+  const account = new Account();
+  account.recordTransaction("deposit", 1);
+
+  assert.throws(
+    () => account.getTransactions({ startingAfter: "does-not-exist" }),
+    InvalidPaginationError
+  );
+});
+
+test("a startingAfter id that has been evicted is rejected", () => {
+  const account = new Account({ maxHistory: 2 });
+  const first = account.recordTransaction("deposit", 1);
+  account.recordTransaction("deposit", 2);
+  account.recordTransaction("deposit", 3); // evicts the first transaction
+
+  assert.throws(
+    () => account.getTransactions({ startingAfter: first.id }),
+    InvalidPaginationError
+  );
 });

@@ -179,6 +179,58 @@ test("GET /accounts/:accountId/transactions returns recorded history in order", 
   assert.equal(res.body.transactions[1].type, "withdrawal");
 });
 
+test("GET /accounts/:accountId/transactions paginates with limit and startingAfter", async () => {
+  const app = createApp();
+  const accountId = await createAccount(app);
+  for (let amount = 1; amount <= 3; amount++) {
+    await request(app)
+      .post(`/accounts/${accountId}/transactions`)
+      .send({ type: "deposit", amount });
+  }
+
+  const firstPage = await request(app).get(
+    `/accounts/${accountId}/transactions?limit=2`
+  );
+  assert.equal(firstPage.status, 200);
+  assert.deepEqual(
+    firstPage.body.transactions.map((tx: { amount: number }) => tx.amount),
+    [1, 2]
+  );
+  assert.equal(firstPage.body.hasMore, true);
+
+  const lastId =
+    firstPage.body.transactions[firstPage.body.transactions.length - 1].id;
+  const secondPage = await request(app).get(
+    `/accounts/${accountId}/transactions?limit=2&startingAfter=${lastId}`
+  );
+  assert.equal(secondPage.status, 200);
+  assert.deepEqual(
+    secondPage.body.transactions.map((tx: { amount: number }) => tx.amount),
+    [3]
+  );
+  assert.equal(secondPage.body.hasMore, false);
+});
+
+test("GET /accounts/:accountId/transactions rejects an invalid limit with 400", async () => {
+  const app = createApp();
+  const accountId = await createAccount(app);
+
+  const res = await request(app).get(
+    `/accounts/${accountId}/transactions?limit=not-a-number`
+  );
+  assert.equal(res.status, 400);
+});
+
+test("GET /accounts/:accountId/transactions rejects an unknown startingAfter with 400", async () => {
+  const app = createApp();
+  const accountId = await createAccount(app);
+
+  const res = await request(app).get(
+    `/accounts/${accountId}/transactions?startingAfter=does-not-exist`
+  );
+  assert.equal(res.status, 400);
+});
+
 test("transactions on one account do not affect another account's balance or history", async () => {
   const app = createApp();
   const accountA = await createAccount(app);

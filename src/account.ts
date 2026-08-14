@@ -38,6 +38,13 @@ export class IdempotencyKeyConflictError extends Error {
   }
 }
 
+export class InvalidPaginationError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "InvalidPaginationError";
+  }
+}
+
 export interface AccountOptions {
   /** Maximum number of transactions retained in history; oldest are evicted once exceeded. */
   maxHistory?: number;
@@ -45,8 +52,23 @@ export interface AccountOptions {
   maxDescriptionLength?: number;
 }
 
+export interface GetTransactionsOptions {
+  /** Maximum number of transactions to return; defaults to 50, capped at 200. */
+  limit?: number;
+  /** Return only transactions recorded after this transaction id. */
+  startingAfter?: string;
+}
+
+export interface TransactionPage {
+  transactions: Transaction[];
+  /** Whether another page is available by passing the last transaction's id as `startingAfter`. */
+  hasMore: boolean;
+}
+
 const DEFAULT_MAX_HISTORY = 10_000;
 const DEFAULT_MAX_DESCRIPTION_LENGTH = 500;
+const DEFAULT_TRANSACTIONS_LIMIT = 50;
+const MAX_TRANSACTIONS_LIMIT = 200;
 
 /** A single account's balance and transaction history. */
 export class Account {
@@ -146,12 +168,47 @@ export class Account {
     return this.balance;
   }
 
-  getTransactions(): Transaction[] {
-    const result: Transaction[] = new Array(this.historyCount);
-    for (let i = 0; i < this.historyCount; i++) {
-      result[i] = this.history[(this.historyStart + i) % this.maxHistory];
+  getTransactions(options: GetTransactionsOptions = {}): TransactionPage {
+    const limit = this.normalizeLimit(options.limit);
+    const offset = this.resolveStartOffset(options.startingAfter);
+
+    const count = Math.max(0, Math.min(limit, this.historyCount - offset));
+    const transactions: Transaction[] = new Array(count);
+    for (let i = 0; i < count; i++) {
+      transactions[i] = this.history[
+        (this.historyStart + offset + i) % this.maxHistory
+      ];
     }
-    return result;
+
+    return { transactions, hasMore: offset + count < this.historyCount };
+  }
+
+  private normalizeLimit(limit: number | undefined): number {
+    if (limit === undefined) {
+      return DEFAULT_TRANSACTIONS_LIMIT;
+    }
+    if (!Number.isInteger(limit) || limit <= 0) {
+      throw new InvalidPaginationError("limit must be a positive integer");
+    }
+    return Math.min(limit, MAX_TRANSACTIONS_LIMIT);
+  }
+
+  /** Returns the ring-buffer offset just past the transaction matching `startingAfter`. */
+  private resolveStartOffset(startingAfter: string | undefined): number {
+    if (startingAfter === undefined) {
+      return 0;
+    }
+    for (let i = 0; i < this.historyCount; i++) {
+      if (
+        this.history[(this.historyStart + i) % this.maxHistory].id ===
+        startingAfter
+      ) {
+        return i + 1;
+      }
+    }
+    throw new InvalidPaginationError(
+      `startingAfter transaction "${startingAfter}" was not found in this account's history`
+    );
   }
 
   private pushToHistory(transaction: Transaction): void {

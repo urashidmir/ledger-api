@@ -128,7 +128,15 @@ Returns the account's current balance.
 
 ### `GET /accounts/:accountId/transactions`
 
-Returns the account's full transaction history, in chronological order.
+Returns a page of the account's transaction history, in chronological order.
+
+Query parameters:
+
+- `limit`: number of transactions to return. Defaults to 50; values above 200
+  are clamped to 200; non-positive or non-integer values are rejected.
+- `startingAfter`: a transaction `id` — resume the list from the transaction
+  immediately after it. Pass the `id` of the last transaction on the previous
+  page to fetch the next one.
 
 ```json
 {
@@ -141,10 +149,20 @@ Returns the account's full transaction history, in chronological order.
       "description": "Initial deposit",
       "timestamp": "2026-08-14T12:00:00.000Z"
     }
-  ]
+  ],
+  "hasMore": false
 }
 ```
 
+`hasMore` is `true` when another page is available; fetch it by passing the
+last returned transaction's `id` as `startingAfter`.
+
+Responses:
+
+- `200 OK` — the page of transactions.
+- `400 Bad Request` — invalid `limit`, or `startingAfter` doesn't match a
+  transaction still in this account's history (older transactions can be
+  evicted — see "Bounded in-memory store" below).
 - `404 Not Found` — no account with that id.
 
 ## Examples
@@ -199,4 +217,11 @@ View transaction history:
 
 ```bash
 curl http://localhost:3000/accounts/<accountId>/transactions
+```
+
+Page through history (substitute the last transaction id from the previous
+page):
+
+```bash
+curl "http://localhost:3000/accounts/<accountId>/transactions?limit=20&startingAfter=<lastTransactionId>"
 ```

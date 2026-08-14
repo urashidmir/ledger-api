@@ -5,6 +5,7 @@ import {
   InvalidAmountError,
   InvalidDescriptionError,
   InvalidIdempotencyKeyError,
+  InvalidPaginationError,
 } from "./account";
 import { Ledger, UnknownAccountError } from "./ledger";
 import { createAccountsRouter } from "./routes/accounts";
@@ -24,7 +25,8 @@ export function createApp() {
     if (
       err instanceof InvalidAmountError ||
       err instanceof InvalidDescriptionError ||
-      err instanceof InvalidIdempotencyKeyError
+      err instanceof InvalidIdempotencyKeyError ||
+      err instanceof InvalidPaginationError
     ) {
       return res.status(400).json({ error: err.message });
     }

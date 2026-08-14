@@ -33,7 +33,20 @@ export function createTransactionsRouter(ledger: Ledger): Router {
   });
 
   router.get<{ accountId: string }>("/", (req, res) => {
-    res.json({ transactions: ledger.getTransactions(req.params.accountId) });
+    const { accountId } = req.params;
+    const { limit: limitParam, startingAfter: startingAfterParam } = req.query;
+
+    if (Array.isArray(limitParam) || Array.isArray(startingAfterParam)) {
+      return res
+        .status(400)
+        .json({ error: "limit and startingAfter must not be repeated" });
+    }
+
+    const limit = typeof limitParam === "string" ? Number(limitParam) : undefined;
+    const startingAfter =
+      typeof startingAfterParam === "string" ? startingAfterParam : undefined;
+
+    res.json(ledger.getTransactions(accountId, { limit, startingAfter }));
   });
 
   return router;
