@@ -15,11 +15,19 @@ export function createTransactionsRouter(ledger: Ledger): Router {
         .json({ error: 'type must be either "deposit" or "withdrawal"' });
     }
 
+    const idempotencyKey = req.headers["idempotency-key"];
+    if (Array.isArray(idempotencyKey)) {
+      return res
+        .status(400)
+        .json({ error: "Idempotency-Key header must not be repeated" });
+    }
+
     const transaction = ledger.recordTransaction(
       accountId,
       type as TransactionType,
       amount,
-      description
+      description,
+      idempotencyKey
     );
     res.status(201).json(transaction);
   });

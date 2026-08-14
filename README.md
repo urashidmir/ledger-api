@@ -99,11 +99,21 @@ Request body:
 - `amount`: number, must be `> 0` (required)
 - `description`: string (optional)
 
+Optionally send an `Idempotency-Key` header to make retries safe: if the same
+key is sent again with the *same* `type`/`amount`/`description`, the original
+transaction is returned rather than being recorded twice. Reusing a key with
+*different* parameters is rejected with `409 Conflict`. A key stays valid for
+as long as its transaction remains in history (see "Bounded in-memory store"
+below) — once evicted, the key can be reused.
+
 Responses:
 
 - `201 Created` — the created transaction, including the resulting balance.
-- `400 Bad Request` — invalid `type`, invalid `amount`, or invalid `description`.
+- `400 Bad Request` — invalid `type`, invalid `amount`, invalid `description`,
+  or invalid `Idempotency-Key`.
 - `404 Not Found` — no account with that id.
+- `409 Conflict` — the `Idempotency-Key` was already used with different
+  transaction parameters.
 - `422 Unprocessable Entity` — withdrawal amount exceeds current balance.
 
 ### `GET /accounts/:accountId/balance`
@@ -150,6 +160,16 @@ Make a deposit (substitute the account id returned above):
 ```bash
 curl -X POST http://localhost:3000/accounts/<accountId>/transactions \
   -H "Content-Type: application/json" \
+  -d '{"type": "deposit", "amount": 100, "description": "Initial deposit"}'
+```
+
+Safely retry a deposit (send the same `Idempotency-Key` again to get the
+original transaction back instead of recording a second one):
+
+```bash
+curl -X POST http://localhost:3000/accounts/<accountId>/transactions \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: 3f8e7b2a-checkout-42" \
   -d '{"type": "deposit", "amount": 100, "description": "Initial deposit"}'
 ```
 

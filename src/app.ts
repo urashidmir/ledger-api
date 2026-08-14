@@ -1,8 +1,10 @@
 import express, { NextFunction, Request, Response } from "express";
 import {
+  IdempotencyKeyConflictError,
   InsufficientFundsError,
   InvalidAmountError,
   InvalidDescriptionError,
+  InvalidIdempotencyKeyError,
 } from "./account";
 import { Ledger, UnknownAccountError } from "./ledger";
 import { createAccountsRouter } from "./routes/accounts";
@@ -19,7 +21,11 @@ export function createApp() {
   });
 
   app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
-    if (err instanceof InvalidAmountError || err instanceof InvalidDescriptionError) {
+    if (
+      err instanceof InvalidAmountError ||
+      err instanceof InvalidDescriptionError ||
+      err instanceof InvalidIdempotencyKeyError
+    ) {
       return res.status(400).json({ error: err.message });
     }
     if (err instanceof InsufficientFundsError) {
@@ -27,6 +33,9 @@ export function createApp() {
     }
     if (err instanceof UnknownAccountError) {
       return res.status(404).json({ error: err.message });
+    }
+    if (err instanceof IdempotencyKeyConflictError) {
+      return res.status(409).json({ error: err.message });
     }
     if (err instanceof SyntaxError && "body" in err) {
       return res.status(400).json({ error: "Invalid JSON body" });

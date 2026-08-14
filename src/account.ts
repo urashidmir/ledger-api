@@ -22,6 +22,22 @@ export class InvalidDescriptionError extends Error {
   }
 }
 
+export class InvalidIdempotencyKeyError extends Error {
+  constructor() {
+    super("Idempotency-Key must be a non-empty string");
+    this.name = "InvalidIdempotencyKeyError";
+  }
+}
+
+export class IdempotencyKeyConflictError extends Error {
+  constructor(idempotencyKey: string) {
+    super(
+      `Idempotency-Key "${idempotencyKey}" was already used with different transaction parameters`
+    );
+    this.name = "IdempotencyKeyConflictError";
+  }
+}
+
 export interface AccountOptions {
   /** Maximum number of transactions retained in history; oldest are evicted once exceeded. */
   maxHistory?: number;
@@ -47,6 +63,12 @@ export class Account {
   private historyStart = 0;
   private historyCount = 0;
 
+  // Maps an idempotency key to the transaction it originally created, so a
+  // retried request with the same key can return that transaction instead of
+  // recording a duplicate. An entry is removed the moment its transaction is
+  // evicted from history, so this map never outgrows the ring buffer above.
+  private readonly idempotencyKeys = new Map<string, Transaction>();
+
   constructor(options: AccountOptions = {}) {
     const maxHistory = options.maxHistory ?? DEFAULT_MAX_HISTORY;
     if (!Number.isInteger(maxHistory) || maxHistory <= 0) {
@@ -62,8 +84,27 @@ export class Account {
   recordTransaction(
     type: TransactionType,
     amount: number,
-    description?: string
+    description?: string,
+    idempotencyKey?: string
   ): Transaction {
+    if (idempotencyKey !== undefined) {
+      if (typeof idempotencyKey !== "string" || idempotencyKey.length === 0) {
+        throw new InvalidIdempotencyKeyError();
+      }
+
+      const existing = this.idempotencyKeys.get(idempotencyKey);
+      if (existing) {
+        if (
+          existing.type !== type ||
+          existing.amount !== amount ||
+          existing.description !== description
+        ) {
+          throw new IdempotencyKeyConflictError(idempotencyKey);
+        }
+        return existing;
+      }
+    }
+
     if (typeof amount !== "number" || !Number.isFinite(amount) || amount <= 0) {
       throw new InvalidAmountError();
     }
@@ -89,9 +130,15 @@ export class Account {
       balanceAfter: this.balance,
       description,
       timestamp: new Date().toISOString(),
+      idempotencyKey,
     };
 
     this.pushToHistory(transaction);
+
+    if (idempotencyKey !== undefined) {
+      this.idempotencyKeys.set(idempotencyKey, transaction);
+    }
+
     return transaction;
   }
 
@@ -109,14 +156,20 @@ export class Account {
 
   private pushToHistory(transaction: Transaction): void {
     const index = (this.historyStart + this.historyCount) % this.maxHistory;
+    const isFull = this.historyCount === this.maxHistory;
+    const evicted = isFull ? this.history[index] : undefined;
     this.history[index] = transaction;
 
-    if (this.historyCount < this.maxHistory) {
+    if (!isFull) {
       this.historyCount++;
     } else {
       // Buffer is full: the slot we just overwrote was the oldest entry,
       // so the new oldest is the next one along.
       this.historyStart = (this.historyStart + 1) % this.maxHistory;
+    }
+
+    if (evicted?.idempotencyKey !== undefined) {
+      this.idempotencyKeys.delete(evicted.idempotencyKey);
     }
   }
 }

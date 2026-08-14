@@ -2,9 +2,11 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   Account,
+  IdempotencyKeyConflictError,
   InsufficientFundsError,
   InvalidAmountError,
   InvalidDescriptionError,
+  InvalidIdempotencyKeyError,
 } from "./account";
 
 test("starts with a zero balance and empty history", () => {
@@ -129,4 +131,54 @@ test("rejects a description longer than the configured max, enforced by the acco
 
   const tx = account.recordTransaction("deposit", 10, "12345");
   assert.equal(tx.description, "12345");
+});
+
+test("a retried request with the same idempotency key returns the original transaction, without recording a duplicate", () => {
+  const account = new Account();
+  const first = account.recordTransaction("deposit", 100, "pay", "key-1");
+  const retry = account.recordTransaction("deposit", 100, "pay", "key-1");
+
+  assert.equal(retry.id, first.id);
+  assert.equal(account.getBalance(), 100);
+  assert.equal(account.getTransactions().length, 1);
+});
+
+test("reusing an idempotency key with different parameters is rejected", () => {
+  const account = new Account();
+  account.recordTransaction("deposit", 100, "pay", "key-1");
+
+  assert.throws(
+    () => account.recordTransaction("deposit", 50, "pay", "key-1"),
+    IdempotencyKeyConflictError
+  );
+  assert.equal(account.getBalance(), 100);
+  assert.equal(account.getTransactions().length, 1);
+});
+
+test("different idempotency keys record independent transactions", () => {
+  const account = new Account();
+  account.recordTransaction("deposit", 100, undefined, "key-1");
+  account.recordTransaction("deposit", 100, undefined, "key-2");
+
+  assert.equal(account.getBalance(), 200);
+  assert.equal(account.getTransactions().length, 2);
+});
+
+test("rejects an empty idempotency key", () => {
+  const account = new Account();
+  assert.throws(
+    () => account.recordTransaction("deposit", 10, undefined, ""),
+    InvalidIdempotencyKeyError
+  );
+});
+
+test("an evicted transaction's idempotency key can be reused once it falls out of history", () => {
+  const account = new Account({ maxHistory: 2 });
+  account.recordTransaction("deposit", 1, undefined, "key-1");
+  account.recordTransaction("deposit", 2);
+  account.recordTransaction("deposit", 3); // evicts the "key-1" transaction
+
+  const tx = account.recordTransaction("deposit", 4, undefined, "key-1");
+  assert.equal(tx.amount, 4);
+  assert.equal(account.getBalance(), 10);
 });

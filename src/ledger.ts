@@ -50,12 +50,14 @@ export class Ledger {
     accountId: string,
     type: TransactionType,
     amount: number,
-    description?: string
+    description?: string,
+    idempotencyKey?: string
   ): Transaction {
     return this.getAccountOrThrow(accountId).recordTransaction(
       type,
       amount,
-      description
+      description,
+      idempotencyKey
     );
   }
 

@@ -107,6 +107,49 @@ test("POST /accounts/:accountId/transactions returns 404 for an unknown account"
   assert.equal(res.status, 404);
 });
 
+test("retrying POST /accounts/:accountId/transactions with the same Idempotency-Key returns the original transaction", async () => {
+  const app = createApp();
+  const accountId = await createAccount(app);
+  const body = { type: "deposit", amount: 100, description: "pay" };
+
+  const first = await request(app)
+    .post(`/accounts/${accountId}/transactions`)
+    .set("Idempotency-Key", "retry-1")
+    .send(body);
+  const retry = await request(app)
+    .post(`/accounts/${accountId}/transactions`)
+    .set("Idempotency-Key", "retry-1")
+    .send(body);
+
+  assert.equal(first.status, 201);
+  assert.equal(retry.status, 201);
+  assert.equal(retry.body.id, first.body.id);
+
+  const balance = await request(app).get(`/accounts/${accountId}/balance`);
+  assert.equal(balance.body.balance, 100);
+
+  const transactions = await request(app).get(
+    `/accounts/${accountId}/transactions`
+  );
+  assert.equal(transactions.body.transactions.length, 1);
+});
+
+test("reusing an Idempotency-Key with different transaction parameters returns 409", async () => {
+  const app = createApp();
+  const accountId = await createAccount(app);
+
+  await request(app)
+    .post(`/accounts/${accountId}/transactions`)
+    .set("Idempotency-Key", "retry-1")
+    .send({ type: "deposit", amount: 100 });
+  const res = await request(app)
+    .post(`/accounts/${accountId}/transactions`)
+    .set("Idempotency-Key", "retry-1")
+    .send({ type: "deposit", amount: 50 });
+
+  assert.equal(res.status, 409);
+});
+
 test("GET /accounts/:accountId/balance reflects recorded transactions", async () => {
   const app = createApp();
   const accountId = await createAccount(app);
