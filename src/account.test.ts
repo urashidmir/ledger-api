@@ -279,3 +279,33 @@ test("a startingAfter id that has been evicted is rejected", () => {
     InvalidPaginationError
   );
 });
+
+test("repeated fractional deposits don't accumulate floating-point drift", () => {
+  const account = new Account();
+  account.recordTransaction("deposit", 0.1);
+  const tx = account.recordTransaction("deposit", 0.2);
+
+  assert.equal(account.getBalance(), 0.3);
+  assert.equal(tx.balanceAfter, 0.3);
+});
+
+test("a withdrawal that exactly empties a drift-prone balance succeeds", () => {
+  const account = new Account();
+  account.recordTransaction("deposit", 0.3);
+  account.recordTransaction("withdrawal", 0.1);
+  account.recordTransaction("withdrawal", 0.1);
+  const tx = account.recordTransaction("withdrawal", 0.1);
+
+  assert.equal(tx.balanceAfter, 0);
+  assert.equal(account.getBalance(), 0);
+});
+
+test("withdrawing back to zero leaves no floating-point dust", () => {
+  const account = new Account();
+  account.recordTransaction("deposit", 0.1);
+  account.recordTransaction("deposit", 0.2);
+  const tx = account.recordTransaction("withdrawal", 0.3);
+
+  assert.equal(tx.balanceAfter, 0);
+  assert.equal(account.getBalance(), 0);
+});

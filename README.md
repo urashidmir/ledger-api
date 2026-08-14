@@ -17,7 +17,10 @@ against them, check balances, and view transaction history. No UI — API only.
 - **Amounts are plain numbers**, must be finite and strictly greater than 0.
   There's no currency/locale/decimal-precision handling — the amount is
   whatever unit the caller has in mind (e.g. dollars, cents — pick one and be
-  consistent).
+  consistent). An account's running balance is rounded to the nearest 1e-9
+  after every transaction, purely to eliminate IEEE-754 floating-point
+  representation noise (e.g. `0.1 + 0.2` producing `0.30000000000000004`
+  instead of `0.3`) — it isn't a currency-precision guarantee.
 - **No concurrency control.** Not needed for this exercise: Node's
   single-threaded event loop processes each request to completion before
   starting the next, so there's no risk of interleaved reads/writes on the

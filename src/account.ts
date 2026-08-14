@@ -70,6 +70,15 @@ const DEFAULT_MAX_DESCRIPTION_LENGTH = 500;
 const DEFAULT_TRANSACTIONS_LIMIT = 50;
 const MAX_TRANSACTIONS_LIMIT = 200;
 
+// Rounds to the nearest 1e-9 to eliminate IEEE-754 representation noise
+// (e.g. 0.1 + 0.2 === 0.30000000000000004) from accumulating across
+// transactions, without constraining real precision for any currency unit.
+const BALANCE_PRECISION = 1e9;
+
+function roundBalance(value: number): number {
+  return Math.round(value * BALANCE_PRECISION) / BALANCE_PRECISION;
+}
+
 /** A single account's balance and transaction history. */
 export class Account {
   readonly createdAt: string = new Date().toISOString();
@@ -143,7 +152,9 @@ export class Account {
       throw new InsufficientFundsError();
     }
 
-    this.balance += type === "deposit" ? amount : -amount;
+    this.balance = roundBalance(
+      this.balance + (type === "deposit" ? amount : -amount)
+    );
 
     const transaction: Transaction = {
       id: randomUUID(),
