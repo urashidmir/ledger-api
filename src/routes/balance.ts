@@ -2,10 +2,10 @@ import { Router } from "express";
 import { Ledger } from "../ledger";
 
 export function createBalanceRouter(ledger: Ledger): Router {
-  const router = Router();
+  const router = Router({ mergeParams: true });
 
-  router.get("/", (_req, res) => {
-    res.json({ balance: ledger.getBalance() });
+  router.get<{ accountId: string }>("/", (req, res) => {
+    res.json({ balance: ledger.getBalance(req.params.accountId) });
   });
 
   return router;

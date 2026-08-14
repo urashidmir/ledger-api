@@ -1,12 +1,14 @@
 # Simple Ledger API
 
-A small in-memory ledger API: record deposits/withdrawals, check the current
-balance, and view transaction history. No UI — API only.
+A small in-memory ledger API: create accounts, record deposits/withdrawals
+against them, check balances, and view transaction history. No UI — API only.
 
 ## Assumptions
 
-- **Single global account.** There is no concept of users/accounts — the
-  whole app tracks one balance and one transaction history.
+- **Multiple accounts, no owners.** The ledger tracks any number of
+  independent accounts, each with its own balance and transaction history,
+  identified by a server-generated id. There's no concept of a user who owns
+  an account — anyone who has an account's id can operate on it.
 - **In-memory storage only.** All data lives in a process-local variable and
   is lost when the server restarts. No database, no file persistence.
 - **No authentication/authorisation.** Every endpoint is open.
@@ -59,9 +61,33 @@ npm test
 
 ## API
 
-### `POST /transactions`
+### `POST /accounts`
 
-Record a deposit or withdrawal.
+Create a new account with a zero balance. No request body needed.
+
+Response `201 Created`:
+
+```json
+{ "id": "b6e1c2b0-...", "balance": 0, "createdAt": "2026-08-14T12:00:00.000Z" }
+```
+
+### `GET /accounts`
+
+Lists every account.
+
+```json
+{ "accounts": [{ "id": "b6e1c2b0-...", "balance": 100, "createdAt": "..." }] }
+```
+
+### `GET /accounts/:accountId`
+
+Returns a single account's summary (id, balance, creation time).
+
+- `404 Not Found` — no account with that id.
+
+### `POST /accounts/:accountId/transactions`
+
+Record a deposit or withdrawal against the given account.
 
 Request body:
 
@@ -77,19 +103,22 @@ Responses:
 
 - `201 Created` — the created transaction, including the resulting balance.
 - `400 Bad Request` — invalid `type`, invalid `amount`, or invalid `description`.
+- `404 Not Found` — no account with that id.
 - `422 Unprocessable Entity` — withdrawal amount exceeds current balance.
 
-### `GET /balance`
+### `GET /accounts/:accountId/balance`
 
-Returns the current balance.
+Returns the account's current balance.
 
 ```json
 { "balance": 100 }
 ```
 
-### `GET /transactions`
+- `404 Not Found` — no account with that id.
 
-Returns the full transaction history, in chronological order.
+### `GET /accounts/:accountId/transactions`
+
+Returns the account's full transaction history, in chronological order.
 
 ```json
 {
@@ -106,12 +135,20 @@ Returns the full transaction history, in chronological order.
 }
 ```
 
+- `404 Not Found` — no account with that id.
+
 ## Examples
 
-Make a deposit:
+Create an account:
 
 ```bash
-curl -X POST http://localhost:3000/transactions \
+curl -X POST http://localhost:3000/accounts
+```
+
+Make a deposit (substitute the account id returned above):
+
+```bash
+curl -X POST http://localhost:3000/accounts/<accountId>/transactions \
   -H "Content-Type: application/json" \
   -d '{"type": "deposit", "amount": 100, "description": "Initial deposit"}'
 ```
@@ -119,7 +156,7 @@ curl -X POST http://localhost:3000/transactions \
 Make a withdrawal:
 
 ```bash
-curl -X POST http://localhost:3000/transactions \
+curl -X POST http://localhost:3000/accounts/<accountId>/transactions \
   -H "Content-Type: application/json" \
   -d '{"type": "withdrawal", "amount": 40, "description": "Groceries"}'
 ```
@@ -127,7 +164,7 @@ curl -X POST http://localhost:3000/transactions \
 Attempt an overdraft (fails with 422):
 
 ```bash
-curl -X POST http://localhost:3000/transactions \
+curl -X POST http://localhost:3000/accounts/<accountId>/transactions \
   -H "Content-Type: application/json" \
   -d '{"type": "withdrawal", "amount": 1000000}'
 ```
@@ -135,11 +172,11 @@ curl -X POST http://localhost:3000/transactions \
 Check the balance:
 
 ```bash
-curl http://localhost:3000/balance
+curl http://localhost:3000/accounts/<accountId>/balance
 ```
 
 View transaction history:
 
 ```bash
-curl http://localhost:3000/transactions
+curl http://localhost:3000/accounts/<accountId>/transactions
 ```

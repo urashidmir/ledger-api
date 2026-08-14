@@ -1,120 +1,73 @@
 import { randomUUID } from "crypto";
+import { Account, AccountOptions } from "./account";
 import { Transaction, TransactionType } from "./types";
 
-export class InsufficientFundsError extends Error {
-  constructor() {
-    super("Withdrawal amount exceeds current balance");
-    this.name = "InsufficientFundsError";
+export class UnknownAccountError extends Error {
+  constructor(accountId: string) {
+    super(`No account found with id "${accountId}"`);
+    this.name = "UnknownAccountError";
   }
 }
 
-export class InvalidAmountError extends Error {
-  constructor() {
-    super("Amount must be a finite number greater than 0");
-    this.name = "InvalidAmountError";
-  }
+export interface AccountSummary {
+  id: string;
+  balance: number;
+  createdAt: string;
 }
 
-export class InvalidDescriptionError extends Error {
-  constructor(maxLength: number) {
-    super(`Description must be a string of at most ${maxLength} characters`);
-    this.name = "InvalidDescriptionError";
-  }
-}
-
-export interface LedgerOptions {
-  /** Maximum number of transactions retained in history; oldest are evicted once exceeded. */
-  maxHistory?: number;
-  /** Maximum length of a transaction's description. */
-  maxDescriptionLength?: number;
-}
-
-const DEFAULT_MAX_HISTORY = 10_000;
-const DEFAULT_MAX_DESCRIPTION_LENGTH = 500;
-
+/** A collection of accounts, each with its own balance and transaction history. */
 export class Ledger {
-  private balance = 0;
-  private readonly maxHistory: number;
-  private readonly maxDescriptionLength: number;
+  private readonly accounts = new Map<string, Account>();
 
-  // Fixed-size ring buffer: history[i] wraps at maxHistory, historyStart is
-  // the index of the oldest retained transaction, historyCount how many
-  // slots are currently populated. This keeps both inserts and evictions
-  // O(1), regardless of how large maxHistory is.
-  private readonly history: Transaction[];
-  private historyStart = 0;
-  private historyCount = 0;
+  constructor(private readonly accountOptions: AccountOptions = {}) {}
 
-  constructor(options: LedgerOptions = {}) {
-    const maxHistory = options.maxHistory ?? DEFAULT_MAX_HISTORY;
-    if (!Number.isInteger(maxHistory) || maxHistory <= 0) {
-      throw new RangeError("maxHistory must be a positive integer");
-    }
+  createAccount(): AccountSummary {
+    const id = randomUUID();
+    const account = new Account(this.accountOptions);
+    this.accounts.set(id, account);
+    return this.toSummary(id, account);
+  }
 
-    this.maxHistory = maxHistory;
-    this.maxDescriptionLength =
-      options.maxDescriptionLength ?? DEFAULT_MAX_DESCRIPTION_LENGTH;
-    this.history = new Array(maxHistory);
+  listAccounts(): AccountSummary[] {
+    return [...this.accounts.entries()].map(([id, account]) =>
+      this.toSummary(id, account)
+    );
+  }
+
+  getAccountSummary(accountId: string): AccountSummary {
+    return this.toSummary(accountId, this.getAccountOrThrow(accountId));
+  }
+
+  getBalance(accountId: string): number {
+    return this.getAccountOrThrow(accountId).getBalance();
+  }
+
+  getTransactions(accountId: string): Transaction[] {
+    return this.getAccountOrThrow(accountId).getTransactions();
   }
 
   recordTransaction(
+    accountId: string,
     type: TransactionType,
     amount: number,
     description?: string
   ): Transaction {
-    if (typeof amount !== "number" || !Number.isFinite(amount) || amount <= 0) {
-      throw new InvalidAmountError();
-    }
-
-    if (
-      description !== undefined &&
-      (typeof description !== "string" ||
-        description.length > this.maxDescriptionLength)
-    ) {
-      throw new InvalidDescriptionError(this.maxDescriptionLength);
-    }
-
-    if (type === "withdrawal" && amount > this.balance) {
-      throw new InsufficientFundsError();
-    }
-
-    this.balance += type === "deposit" ? amount : -amount;
-
-    const transaction: Transaction = {
-      id: randomUUID(),
+    return this.getAccountOrThrow(accountId).recordTransaction(
       type,
       amount,
-      balanceAfter: this.balance,
-      description,
-      timestamp: new Date().toISOString(),
-    };
-
-    this.pushToHistory(transaction);
-    return transaction;
+      description
+    );
   }
 
-  getBalance(): number {
-    return this.balance;
-  }
-
-  getTransactions(): Transaction[] {
-    const result: Transaction[] = new Array(this.historyCount);
-    for (let i = 0; i < this.historyCount; i++) {
-      result[i] = this.history[(this.historyStart + i) % this.maxHistory];
+  private getAccountOrThrow(accountId: string): Account {
+    const account = this.accounts.get(accountId);
+    if (!account) {
+      throw new UnknownAccountError(accountId);
     }
-    return result;
+    return account;
   }
 
-  private pushToHistory(transaction: Transaction): void {
-    const index = (this.historyStart + this.historyCount) % this.maxHistory;
-    this.history[index] = transaction;
-
-    if (this.historyCount < this.maxHistory) {
-      this.historyCount++;
-    } else {
-      // Buffer is full: the slot we just overwrote was the oldest entry,
-      // so the new oldest is the next one along.
-      this.historyStart = (this.historyStart + 1) % this.maxHistory;
-    }
+  private toSummary(id: string, account: Account): AccountSummary {
+    return { id, balance: account.getBalance(), createdAt: account.createdAt };
   }
 }

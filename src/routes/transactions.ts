@@ -3,9 +3,10 @@ import { Ledger } from "../ledger";
 import { TransactionType } from "../types";
 
 export function createTransactionsRouter(ledger: Ledger): Router {
-  const router = Router();
+  const router = Router({ mergeParams: true });
 
-  router.post("/", (req, res) => {
+  router.post<{ accountId: string }>("/", (req, res) => {
+    const { accountId } = req.params;
     const { type, amount, description } = req.body ?? {};
 
     if (type !== "deposit" && type !== "withdrawal") {
@@ -15,6 +16,7 @@ export function createTransactionsRouter(ledger: Ledger): Router {
     }
 
     const transaction = ledger.recordTransaction(
+      accountId,
       type as TransactionType,
       amount,
       description
@@ -22,8 +24,8 @@ export function createTransactionsRouter(ledger: Ledger): Router {
     res.status(201).json(transaction);
   });
 
-  router.get("/", (_req, res) => {
-    res.json({ transactions: ledger.getTransactions() });
+  router.get<{ accountId: string }>("/", (req, res) => {
+    res.json({ transactions: ledger.getTransactions(req.params.accountId) });
   });
 
   return router;
