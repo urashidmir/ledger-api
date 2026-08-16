@@ -17,6 +17,9 @@ against them, check balances, and view transaction history. No UI — API only.
 - **No authentication/authorisation.** Every endpoint is open.
 - **Overdrafts are rejected.** A withdrawal whose amount exceeds the current
   balance fails with `422 Unprocessable Entity` and no state change.
+- **Transactions are immutable.** Once recorded, a transaction can't be
+  edited, reversed, or deleted — correcting a mistake means posting a new,
+  opposite transaction.
 - **Amounts are plain numbers**, must be finite and strictly greater than 0.
   There's no currency/locale/decimal-precision handling — the amount is
   whatever unit the caller has in mind (e.g. dollars, cents — pick one and be
