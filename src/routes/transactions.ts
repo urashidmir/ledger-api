@@ -2,7 +2,7 @@ import { Router } from "express";
 import { Ledger } from "../ledger";
 import { TransactionType } from "../types";
 
-export function createTransactionsRouter(ledger: Ledger): Router {
+export function transactionsRouter(ledger: Ledger): Router {
   const router = Router({ mergeParams: true });
 
   router.post<{ accountId: string }>("/", (req, res) => {

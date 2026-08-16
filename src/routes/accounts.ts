@@ -1,9 +1,9 @@
 import { Router } from "express";
 import { Ledger } from "../ledger";
-import { createBalanceRouter } from "./balance";
-import { createTransactionsRouter } from "./transactions";
+import { balanceRouter } from "./balance";
+import { transactionsRouter } from "./transactions";
 
-export function createAccountsRouter(ledger: Ledger): Router {
+export function accountsRouter(ledger: Ledger): Router {
   const router = Router();
 
   router.post("/", (_req, res) => {
@@ -18,8 +18,8 @@ export function createAccountsRouter(ledger: Ledger): Router {
     res.json(ledger.getAccountSummary(req.params.accountId));
   });
 
-  router.use("/:accountId/balance", createBalanceRouter(ledger));
-  router.use("/:accountId/transactions", createTransactionsRouter(ledger));
+  router.use("/:accountId/balance", balanceRouter(ledger));
+  router.use("/:accountId/transactions", transactionsRouter(ledger));
 
   return router;
 }

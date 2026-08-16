@@ -8,14 +8,14 @@ import {
   InvalidPaginationError,
 } from "./account";
 import { Ledger, UnknownAccountError } from "./ledger";
-import { createAccountsRouter } from "./routes/accounts";
+import { accountsRouter } from "./routes/accounts";
 
 export function createApp() {
   const app = express();
   app.use(express.json({ limit: "10kb" }));
 
   const ledger = new Ledger();
-  app.use("/accounts", createAccountsRouter(ledger));
+  app.use("/accounts", accountsRouter(ledger));
 
   app.use((_req, res) => {
     res.status(404).json({ error: "Not found" });
