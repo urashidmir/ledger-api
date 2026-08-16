@@ -5,6 +5,8 @@ against them, check balances, and view transaction history. No UI — API only.
 
 ## Assumptions
 
+Things taken as given for this exercise, not actively defended:
+
 - **Multiple accounts, no owners.** The ledger tracks any number of
   independent accounts, each with its own balance and transaction history,
   identified by a server-generated id. There's no concept of a user who owns
@@ -15,31 +17,87 @@ against them, check balances, and view transaction history. No UI — API only.
 - **In-memory storage only.** All data lives in a process-local variable and
   is lost when the server restarts. No database, no file persistence.
 - **No authentication/authorisation.** Every endpoint is open.
-- **Overdrafts are rejected.** A withdrawal whose amount exceeds the current
-  balance fails with `422 Unprocessable Entity` and no state change.
-- **Transactions are immutable.** Once recorded, a transaction can't be
-  edited, reversed, or deleted — correcting a mistake means posting a new,
-  opposite transaction.
+- **No logging/monitoring** beyond the default `console.log` on startup.
 - **Amounts are plain numbers**, must be finite and strictly greater than 0.
   There's no currency/locale/decimal-precision handling — the amount is
   whatever unit the caller has in mind (e.g. dollars, cents — pick one and be
-  consistent). An account's running balance is rounded to the nearest 1e-9
-  after every transaction, purely to eliminate IEEE-754 floating-point
-  representation noise (e.g. `0.1 + 0.2` producing `0.30000000000000004`
-  instead of `0.3`) — it isn't a currency-precision guarantee.
+  consistent).
+
+## Design decisions
+
+Choices made deliberately, with a reason behind each:
+
+- **Overdrafts return `422`, not `400`.** A withdrawal whose amount exceeds
+  the current balance is a well-formed request that's invalid given the
+  account's current state, not a malformed one — so it fails with
+  `422 Unprocessable Entity` and no state change, while `400` stays reserved
+  for bad input shape (missing/invalid fields).
+- **Transactions are immutable.** Once recorded, a transaction can't be
+  edited, reversed, or deleted — correcting a mistake means posting a new,
+  opposite transaction. This keeps the history an honest audit trail instead
+  of a mutable log.
+- **Floating-point noise is rounded away, not avoided.** An account's
+  running balance is rounded to the nearest 1e-9 after every transaction,
+  purely to eliminate IEEE-754 representation noise (e.g. `0.1 + 0.2`
+  producing `0.30000000000000004` instead of `0.3`). Integer minor units
+  (cents) weren't used because no currency is assumed — see "Amounts are
+  plain numbers" above — so there's no fixed exchange rate between the unit
+  and an integer subunit. See "Known limitations" below for why this isn't a
+  real fix.
 - **No concurrency control.** Not needed for this exercise: Node's
   single-threaded event loop processes each request to completion before
   starting the next, so there's no risk of interleaved reads/writes on the
   in-memory store.
-- **No logging/monitoring** beyond the default `console.log` on startup.
-- **Bounded in-memory store.** `description` is capped at 500 characters, the
-  JSON request body is capped at 10kb, and only the most recent 10,000
-  transactions are retained (older ones are evicted first-in-first-out). The
-  running `balance` is unaffected by eviction — it's tracked independently of
-  the history array.
-- **JSON everywhere.** Unknown routes and malformed request bodies get a JSON
-  error response (`404`/`400`) rather than Express's default HTML error page,
-  so clients never need to branch on content type.
+- **Idempotency keys make retries safe.** Sending the same `Idempotency-Key`
+  header again with the *same* `type`/`amount`/`description` returns the
+  original transaction instead of recording a second one; reusing a key with
+  *different* parameters is rejected with `409 Conflict`. This makes
+  at-least-once retry behaviour (network blips, client timeouts) safe by
+  default rather than pushing dedup logic onto every caller.
+- **Cursor-based pagination, not offset.** `GET /transactions` pages are
+  navigated with `startingAfter=<transactionId>` rather than a page number
+  or offset, so results stay stable even as new transactions are appended
+  concurrently with paging — an offset would skip or repeat rows once the
+  underlying list shifts.
+- **Bounded in-memory store (cap-and-evict).** `description` is capped at
+  500 characters, the JSON request body at 10kb, and only the most recent
+  10,000 transactions per account are retained (older ones evicted
+  first-in-first-out). This bounds memory growth without external storage.
+  The running `balance` is unaffected by eviction — it's tracked
+  independently of the history array — but idempotency keys tied to evicted
+  transactions do become reusable (see "Known limitations" below).
+- **JSON everywhere.** Unknown routes and malformed request bodies get a
+  JSON error response (`404`/`400`) rather than Express's default HTML error
+  page, so clients never need to branch on content type.
+
+## Known limitations / what I'd do next
+
+- **Floating-point balance arithmetic.** Rounding to 1e-9 hides
+  representation noise but isn't a real fix for money math — it papers over
+  the problem rather than eliminating its cause. A production ledger should
+  use integer minor units (cents) or a decimal library (e.g. `decimal.js`)
+  so precision is exact by construction, not "close enough."
+- **No persistence.** An in-memory store means a restart loses all data.
+  Next step: back the same read/write API with a real datastore (e.g.
+  Postgres), likely with the transaction table modeled as append-only to
+  preserve the immutability guarantee above.
+- **No auth.** Anyone with an account id can operate on it. Next step:
+  per-account credentials or bearer tokens, checked per request.
+- **No inter-account transfers.** Deposits/withdrawals only. A transfer
+  endpoint would need to debit one account and credit another atomically,
+  which the current single-account transaction model doesn't support —
+  it'd need a real cross-account transaction boundary (a DB transaction, or
+  equivalent) rather than two independent calls.
+- **Idempotency keys are evicted with their transaction.** Because history
+  is capped at 10,000 transactions per account, a very old idempotency key
+  can silently become reusable once its transaction is evicted. A
+  production system would need a separate, longer-lived idempotency store
+  decoupled from transaction history retention.
+- **Single-process only.** The "no concurrency control" decision above
+  relies on Node's single-threaded event loop and a single in-memory store.
+  Running multiple instances (for scale or availability) would reintroduce
+  the race conditions this design currently assumes away, and would need a
+  shared datastore with real locking/transactions to fix.
 
 ## Requirements
 
@@ -112,8 +170,8 @@ Optionally send an `Idempotency-Key` header to make retries safe: if the same
 key is sent again with the *same* `type`/`amount`/`description`, the original
 transaction is returned rather than being recorded twice. Reusing a key with
 *different* parameters is rejected with `409 Conflict`. A key stays valid for
-as long as its transaction remains in history (see "Bounded in-memory store"
-below) — once evicted, the key can be reused.
+as long as its transaction remains in history (see "Bounded in-memory store
+(cap-and-evict)" above) — once evicted, the key can be reused.
 
 Responses:
 
@@ -171,7 +229,7 @@ Responses:
 - `200 OK` — the page of transactions.
 - `400 Bad Request` — invalid `limit`, or `startingAfter` doesn't match a
   transaction still in this account's history (older transactions can be
-  evicted — see "Bounded in-memory store" below).
+  evicted — see "Bounded in-memory store (cap-and-evict)" above).
 - `404 Not Found` — no account with that id.
 
 ## Examples
