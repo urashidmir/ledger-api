@@ -5,8 +5,6 @@ against them, check balances, and view transaction history. No UI — API only.
 
 ## Assumptions
 
-Things taken as given for this exercise, not actively defended:
-
 - **Multiple accounts, no owners.** The ledger tracks any number of
   independent accounts, each with its own balance and transaction history,
   identified by a server-generated id. There's no concept of a user who owns
@@ -24,8 +22,6 @@ Things taken as given for this exercise, not actively defended:
   consistent).
 
 ## Design decisions
-
-Choices made deliberately, with a reason behind each:
 
 - **Overdrafts return `422`, not `400`.** A withdrawal whose amount exceeds
   the current balance is a well-formed request that's invalid given the
