@@ -72,7 +72,7 @@ test("getTransactions returns a snapshot, not the live internal array", () => {
     type: "deposit",
     amount: 999,
     balanceAfter: 999,
-    timestamp: new Date().toISOString(),
+    createdAt: new Date().toISOString(),
   });
 
   assert.equal(account.getTransactions().transactions.length, 1);

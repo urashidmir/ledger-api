@@ -162,7 +162,7 @@ export class Account {
       amount,
       balanceAfter: this.balance,
       description,
-      timestamp: new Date().toISOString(),
+      createdAt: new Date().toISOString(),
       idempotencyKey,
     };
 
