@@ -16,10 +16,18 @@ against them, check balances, and view transaction history. No UI — API only.
   is lost when the server restarts. No database, no file persistence.
 - **No authentication/authorisation.** Every endpoint is open.
 - **No logging/monitoring** beyond the default `console.log` on startup.
-- **Amounts are plain numbers**, must be finite and strictly greater than 0.
-  There's no currency/locale/decimal-precision handling — the amount is
-  whatever unit the caller has in mind (e.g. dollars, cents — pick one and be
-  consistent).
+- **Monetary values are JSON numbers, not strings.** `amount` in a
+  transaction request, and every `balance`/`balanceAfter` in a response, are
+  plain IEEE-754 double-precision JSON numbers — the same type across the
+  whole API. `amount` must be finite and strictly greater than 0. There's no
+  currency/locale/decimal-precision handling — the amount is whatever unit
+  the caller has in mind (e.g. dollars, cents — pick one and be consistent).
+  Internally, running balances are tracked with arbitrary-precision decimals
+  to avoid *accumulating* floating-point error across transactions (see
+  "Balance arithmetic..." below) — but every value that crosses the wire is
+  still a JSON number, so a single value is still bounded by double
+  precision (~15-17 significant digits) at that boundary, same as any JSON
+  API.
 
 ## Design decisions
 
@@ -40,13 +48,16 @@ against them, check balances, and view transaction history. No UI — API only.
   earlier version of this rounded the balance to the nearest 1e-9 instead;
   that broke silently for balances above ≈9,007,199 (`Math.round(x * 1e9)`
   itself overflows `Number.MAX_SAFE_INTEGER`), so it was replaced rather
-  than patched. Integer minor units (cents) weren't used because no
-  currency is assumed — see "Amounts are plain numbers" above — so there's
-  no fixed exchange rate between the unit and an integer subunit.
-- **No concurrency control.** Not needed for this exercise: Node's
-  single-threaded event loop processes each request to completion before
-  starting the next, so there's no risk of interleaved reads/writes on the
-  in-memory store.
+  than patched.
+- **No concurrency control.** Not needed here: the balance read-modify-write
+  in `Account.recordTransaction()` — the overdraft check, the balance
+  update, and the history append — is entirely synchronous, with no `await`
+  anywhere in between. Node's event loop can still interleave *different*
+  requests' async work in general, but a synchronous function body always
+  runs to completion before the next callback gets a turn, so two requests
+  can never interleave partway through the same account's read-modify-write.
+  Putting any `await` into that path (e.g. a real database call) would
+  reopen this window — see "Single-process only" below.
 - **Idempotency keys make retries safe.** Sending the same `Idempotency-Key`
   header again with the *same* `type`/`amount`/`description` returns the
   original transaction instead of recording a second one; reusing a key with
@@ -87,15 +98,17 @@ against them, check balances, and view transaction history. No UI — API only.
   can silently become reusable once its transaction is evicted. A
   production system would need a separate, longer-lived idempotency store
   decoupled from transaction history retention.
-- **Single-process only.** The "no concurrency control" decision above
-  relies on Node's single-threaded event loop and a single in-memory store.
-  Running multiple instances (for scale or availability) would reintroduce
-  the race conditions this design currently assumes away, and would need a
-  shared datastore with real locking/transactions to fix.
+- **Single-process only.** The "no concurrency control" decision above holds
+  only because the balance read-modify-write is synchronous end-to-end.
+  Swapping in a real datastore (see "No persistence" above) or running
+  multiple instances for scale/availability would put an `await` in that
+  path and reopen the interleaving window this design currently avoids —
+  either would need real locking or transactions to stay safe.
 
 ## Requirements
 
-- Node.js 18+ (for the built-in `crypto.randomUUID`)
+- Node.js 18+ (the test suite uses the built-in `node:test` test runner,
+  available from Node 18)
 
 ## Running it
 
@@ -208,7 +221,7 @@ Query parameters:
       "amount": 100,
       "balanceAfter": 100,
       "description": "Initial deposit",
-      "timestamp": "2026-08-14T12:00:00.000Z"
+      "createdAt": "2026-08-14T12:00:00.000Z"
     }
   ],
   "hasMore": false
