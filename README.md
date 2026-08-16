@@ -9,6 +9,9 @@ against them, check balances, and view transaction history. No UI — API only.
   independent accounts, each with its own balance and transaction history,
   identified by a server-generated id. There's no concept of a user who owns
   an account — anyone who has an account's id can operate on it.
+- **No inter-account transactions.** Deposits and withdrawals only affect the
+  single account they're posted against — there's no transfer operation that
+  debits one account and credits another atomically.
 - **In-memory storage only.** All data lives in a process-local variable and
   is lost when the server restarts. No database, no file persistence.
 - **No authentication/authorisation.** Every endpoint is open.
