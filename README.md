@@ -32,14 +32,17 @@ against them, check balances, and view transaction history. No UI — API only.
   edited, reversed, or deleted — correcting a mistake means posting a new,
   opposite transaction. This keeps the history an honest audit trail instead
   of a mutable log.
-- **Floating-point noise is rounded away, not avoided.** An account's
-  running balance is rounded to the nearest 1e-9 after every transaction,
-  purely to eliminate IEEE-754 representation noise (e.g. `0.1 + 0.2`
-  producing `0.30000000000000004` instead of `0.3`). Integer minor units
-  (cents) weren't used because no currency is assumed — see "Amounts are
-  plain numbers" above — so there's no fixed exchange rate between the unit
-  and an integer subunit. See "Known limitations" below for why this isn't a
-  real fix.
+- **Balance arithmetic uses arbitrary-precision decimals, not floats.** An
+  account's running balance is tracked with `decimal.js` rather than a plain
+  JS `number`, so deposits/withdrawals never accumulate IEEE-754 binary
+  representation noise (e.g. `0.1 + 0.2` producing `0.30000000000000004`
+  instead of `0.3`) — there's no error to round away in the first place. An
+  earlier version of this rounded the balance to the nearest 1e-9 instead;
+  that broke silently for balances above ≈9,007,199 (`Math.round(x * 1e9)`
+  itself overflows `Number.MAX_SAFE_INTEGER`), so it was replaced rather
+  than patched. Integer minor units (cents) weren't used because no
+  currency is assumed — see "Amounts are plain numbers" above — so there's
+  no fixed exchange rate between the unit and an integer subunit.
 - **No concurrency control.** Not needed for this exercise: Node's
   single-threaded event loop processes each request to completion before
   starting the next, so there's no risk of interleaved reads/writes on the
@@ -68,11 +71,6 @@ against them, check balances, and view transaction history. No UI — API only.
 
 ## Known limitations / what I'd do next
 
-- **Floating-point balance arithmetic.** Rounding to 1e-9 hides
-  representation noise but isn't a real fix for money math — it papers over
-  the problem rather than eliminating its cause. A production ledger should
-  use integer minor units (cents) or a decimal library (e.g. `decimal.js`)
-  so precision is exact by construction, not "close enough."
 - **No persistence.** An in-memory store means a restart loses all data.
   Next step: back the same read/write API with a real datastore (e.g.
   Postgres), likely with the transaction table modeled as append-only to

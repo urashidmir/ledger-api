@@ -1,4 +1,5 @@
 import { randomUUID } from "crypto";
+import { Decimal } from "decimal.js";
 import { Transaction, TransactionType } from "./types";
 
 export class InsufficientFundsError extends Error {
@@ -70,19 +71,16 @@ const DEFAULT_MAX_DESCRIPTION_LENGTH = 500;
 const DEFAULT_TRANSACTIONS_LIMIT = 50;
 const MAX_TRANSACTIONS_LIMIT = 200;
 
-// Rounds to the nearest 1e-9 to eliminate IEEE-754 representation noise
-// (e.g. 0.1 + 0.2 === 0.30000000000000004) from accumulating across
-// transactions, without constraining real precision for any currency unit.
-const BALANCE_PRECISION = 1e9;
-
-function roundBalance(value: number): number {
-  return Math.round(value * BALANCE_PRECISION) / BALANCE_PRECISION;
-}
-
 /** A single account's balance and transaction history. */
 export class Account {
   readonly createdAt: string = new Date().toISOString();
-  private balance = 0;
+  // Tracked as an arbitrary-precision Decimal, not a number, so that
+  // successive deposits/withdrawals never accumulate IEEE-754 binary
+  // floating-point error (e.g. 0.1 + 0.2 === 0.30000000000000004) —
+  // decimal.js does base-10 arithmetic, so there's no representation noise
+  // to round away in the first place. Converted to a number only at the
+  // public API boundary (getBalance, balanceAfter).
+  private balance = new Decimal(0);
   private readonly maxHistory: number;
   private readonly maxDescriptionLength: number;
 
@@ -148,19 +146,20 @@ export class Account {
       throw new InvalidDescriptionError(this.maxDescriptionLength);
     }
 
-    if (type === "withdrawal" && amount > this.balance) {
+    if (type === "withdrawal" && new Decimal(amount).greaterThan(this.balance)) {
       throw new InsufficientFundsError();
     }
 
-    this.balance = roundBalance(
-      this.balance + (type === "deposit" ? amount : -amount)
-    );
+    this.balance =
+      type === "deposit"
+        ? this.balance.plus(amount)
+        : this.balance.minus(amount);
 
     const transaction: Transaction = {
       id: randomUUID(),
       type,
       amount,
-      balanceAfter: this.balance,
+      balanceAfter: this.balance.toNumber(),
       description,
       createdAt: new Date().toISOString(),
       idempotencyKey,
@@ -176,7 +175,7 @@ export class Account {
   }
 
   getBalance(): number {
-    return this.balance;
+    return this.balance.toNumber();
   }
 
   getTransactions(options: GetTransactionsOptions = {}): TransactionPage {

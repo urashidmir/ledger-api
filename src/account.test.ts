@@ -309,3 +309,13 @@ test("withdrawing back to zero leaves no floating-point dust", () => {
   assert.equal(tx.balanceAfter, 0);
   assert.equal(account.getBalance(), 0);
 });
+
+test("large balances don't drift once Math.round(x * 1e9) would overflow safe-integer range", () => {
+  const account = new Account();
+  account.recordTransaction("deposit", 20_000_000);
+  for (let i = 0; i < 1000; i++) {
+    account.recordTransaction("deposit", 0.01);
+  }
+
+  assert.equal(account.getBalance(), 20_000_010);
+});
