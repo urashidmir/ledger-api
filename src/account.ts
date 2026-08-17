@@ -1,6 +1,6 @@
 import { randomUUID } from "crypto";
 import { Decimal } from "decimal.js";
-import { Transaction, TransactionType } from "./types";
+import type { Transaction, TransactionType } from "./types";
 
 export class InsufficientFundsError extends Error {
   constructor() {
@@ -33,7 +33,7 @@ export class InvalidIdempotencyKeyError extends Error {
 export class IdempotencyKeyConflictError extends Error {
   constructor(idempotencyKey: string) {
     super(
-      `Idempotency-Key "${idempotencyKey}" was already used with different transaction parameters`
+      `Idempotency-Key "${idempotencyKey}" was already used with different transaction parameters`,
     );
     this.name = "IdempotencyKeyConflictError";
   }
@@ -114,7 +114,7 @@ export class Account {
     type: TransactionType,
     amount: number,
     description?: string,
-    idempotencyKey?: string
+    idempotencyKey?: string,
   ): Transaction {
     if (idempotencyKey !== undefined) {
       if (typeof idempotencyKey !== "string" || idempotencyKey.length === 0) {
@@ -146,7 +146,10 @@ export class Account {
       throw new InvalidDescriptionError(this.maxDescriptionLength);
     }
 
-    if (type === "withdrawal" && new Decimal(amount).greaterThan(this.balance)) {
+    if (
+      type === "withdrawal" &&
+      new Decimal(amount).greaterThan(this.balance)
+    ) {
       throw new InsufficientFundsError();
     }
 
@@ -185,9 +188,8 @@ export class Account {
     const count = Math.max(0, Math.min(limit, this.historyCount - offset));
     const transactions: Transaction[] = new Array(count);
     for (let i = 0; i < count; i++) {
-      transactions[i] = this.history[
-        (this.historyStart + offset + i) % this.maxHistory
-      ];
+      transactions[i] =
+        this.history[(this.historyStart + offset + i) % this.maxHistory];
     }
 
     return { transactions, hasMore: offset + count < this.historyCount };
@@ -217,7 +219,7 @@ export class Account {
       }
     }
     throw new InvalidPaginationError(
-      `startingAfter transaction "${startingAfter}" was not found in this account's history`
+      `startingAfter transaction "${startingAfter}" was not found in this account's history`,
     );
   }
 

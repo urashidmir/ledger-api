@@ -1,6 +1,6 @@
 import { Router } from "express";
-import { Ledger } from "../ledger";
-import { TransactionType } from "../types";
+import type { Ledger } from "../ledger";
+import type { TransactionType } from "../types";
 
 export function accountsRouter(ledger: Ledger): Router {
   const router = Router();
@@ -43,7 +43,7 @@ export function accountsRouter(ledger: Ledger): Router {
       type as TransactionType,
       amount,
       description,
-      idempotencyKey
+      idempotencyKey,
     );
     res.status(201).json(transaction);
   });
@@ -58,7 +58,8 @@ export function accountsRouter(ledger: Ledger): Router {
         .json({ error: "limit and startingAfter must not be repeated" });
     }
 
-    const limit = typeof limitParam === "string" ? Number(limitParam) : undefined;
+    const limit =
+      typeof limitParam === "string" ? Number(limitParam) : undefined;
     const startingAfter =
       typeof startingAfterParam === "string" ? startingAfterParam : undefined;
 

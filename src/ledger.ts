@@ -1,11 +1,11 @@
 import { randomUUID } from "crypto";
 import {
   Account,
-  AccountOptions,
-  GetTransactionsOptions,
-  TransactionPage,
+  type AccountOptions,
+  type GetTransactionsOptions,
+  type TransactionPage,
 } from "./account";
-import { Transaction, TransactionType } from "./types";
+import type { Transaction, TransactionType } from "./types";
 
 export class UnknownAccountError extends Error {
   constructor(accountId: string) {
@@ -35,7 +35,7 @@ export class Ledger {
 
   listAccounts(): AccountSummary[] {
     return [...this.accounts.entries()].map(([id, account]) =>
-      this.toSummary(id, account)
+      this.toSummary(id, account),
     );
   }
 
@@ -49,7 +49,7 @@ export class Ledger {
 
   getTransactions(
     accountId: string,
-    options: GetTransactionsOptions = {}
+    options: GetTransactionsOptions = {},
   ): TransactionPage {
     return this.getAccountOrThrow(accountId).getTransactions(options);
   }
@@ -59,13 +59,13 @@ export class Ledger {
     type: TransactionType,
     amount: number,
     description?: string,
-    idempotencyKey?: string
+    idempotencyKey?: string,
   ): Transaction {
     return this.getAccountOrThrow(accountId).recordTransaction(
       type,
       amount,
       description,
-      idempotencyKey
+      idempotencyKey,
     );
   }
 

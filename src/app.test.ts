@@ -1,5 +1,5 @@
-import { test } from "node:test";
 import assert from "node:assert/strict";
+import { test } from "node:test";
 import request from "supertest";
 import { createApp } from "./app";
 
@@ -129,7 +129,7 @@ test("retrying POST /accounts/:accountId/transactions with the same Idempotency-
   assert.equal(balance.body.balance, 100);
 
   const transactions = await request(app).get(
-    `/accounts/${accountId}/transactions`
+    `/accounts/${accountId}/transactions`,
   );
   assert.equal(transactions.body.transactions.length, 1);
 });
@@ -189,24 +189,24 @@ test("GET /accounts/:accountId/transactions paginates with limit and startingAft
   }
 
   const firstPage = await request(app).get(
-    `/accounts/${accountId}/transactions?limit=2`
+    `/accounts/${accountId}/transactions?limit=2`,
   );
   assert.equal(firstPage.status, 200);
   assert.deepEqual(
     firstPage.body.transactions.map((tx: { amount: number }) => tx.amount),
-    [1, 2]
+    [1, 2],
   );
   assert.equal(firstPage.body.hasMore, true);
 
   const lastId =
     firstPage.body.transactions[firstPage.body.transactions.length - 1].id;
   const secondPage = await request(app).get(
-    `/accounts/${accountId}/transactions?limit=2&startingAfter=${lastId}`
+    `/accounts/${accountId}/transactions?limit=2&startingAfter=${lastId}`,
   );
   assert.equal(secondPage.status, 200);
   assert.deepEqual(
     secondPage.body.transactions.map((tx: { amount: number }) => tx.amount),
-    [3]
+    [3],
   );
   assert.equal(secondPage.body.hasMore, false);
 });
@@ -216,7 +216,7 @@ test("GET /accounts/:accountId/transactions rejects an invalid limit with 400", 
   const accountId = await createAccount(app);
 
   const res = await request(app).get(
-    `/accounts/${accountId}/transactions?limit=not-a-number`
+    `/accounts/${accountId}/transactions?limit=not-a-number`,
   );
   assert.equal(res.status, 400);
 });
@@ -226,7 +226,7 @@ test("GET /accounts/:accountId/transactions rejects an unknown startingAfter wit
   const accountId = await createAccount(app);
 
   const res = await request(app).get(
-    `/accounts/${accountId}/transactions?startingAfter=does-not-exist`
+    `/accounts/${accountId}/transactions?startingAfter=does-not-exist`,
   );
   assert.equal(res.status, 400);
 });
@@ -243,7 +243,7 @@ test("transactions on one account do not affect another account's balance or his
   const balanceA = await request(app).get(`/accounts/${accountA}/balance`);
   const balanceB = await request(app).get(`/accounts/${accountB}/balance`);
   const transactionsB = await request(app).get(
-    `/accounts/${accountB}/transactions`
+    `/accounts/${accountB}/transactions`,
   );
 
   assert.equal(balanceA.body.balance, 100);

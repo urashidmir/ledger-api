@@ -1,7 +1,7 @@
-import { test } from "node:test";
 import assert from "node:assert/strict";
-import { Ledger, UnknownAccountError } from "./ledger";
+import { test } from "node:test";
 import { InsufficientFundsError } from "./account";
+import { Ledger, UnknownAccountError } from "./ledger";
 
 test("createAccount returns a summary with a zero balance and a unique id", () => {
   const ledger = new Ledger();
@@ -51,7 +51,7 @@ test("a withdrawal on one account cannot draw down another account's balance", (
 
   assert.throws(
     () => ledger.recordTransaction(b.id, "withdrawal", 1),
-    InsufficientFundsError
+    InsufficientFundsError,
   );
   assert.equal(ledger.getBalance(a.id), 100);
   assert.equal(ledger.getBalance(b.id), 0);
@@ -64,10 +64,7 @@ test("getBalance, getTransactions and recordTransaction reject an unknown accoun
   assert.throws(() => ledger.getTransactions("missing"), UnknownAccountError);
   assert.throws(
     () => ledger.recordTransaction("missing", "deposit", 10),
-    UnknownAccountError
+    UnknownAccountError,
   );
-  assert.throws(
-    () => ledger.getAccountSummary("missing"),
-    UnknownAccountError
-  );
+  assert.throws(() => ledger.getAccountSummary("missing"), UnknownAccountError);
 });

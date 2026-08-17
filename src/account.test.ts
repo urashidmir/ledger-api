@@ -1,5 +1,5 @@
-import { test } from "node:test";
 import assert from "node:assert/strict";
+import { test } from "node:test";
 import {
   Account,
   IdempotencyKeyConflictError,
@@ -13,7 +13,10 @@ import {
 test("starts with a zero balance and empty history", () => {
   const account = new Account();
   assert.equal(account.getBalance(), 0);
-  assert.deepEqual(account.getTransactions(), { transactions: [], hasMore: false });
+  assert.deepEqual(account.getTransactions(), {
+    transactions: [],
+    hasMore: false,
+  });
 });
 
 test("deposit increases the balance and records a transaction", () => {
@@ -43,7 +46,7 @@ test("rejects a withdrawal that exceeds the balance, leaving the balance unchang
 
   assert.throws(
     () => account.recordTransaction("withdrawal", 20),
-    InsufficientFundsError
+    InsufficientFundsError,
   );
   assert.equal(account.getBalance(), 10);
   assert.equal(account.getTransactions().transactions.length, 1);
@@ -55,7 +58,7 @@ test("rejects non-positive or non-finite amounts", () => {
   for (const amount of [0, -5, NaN, Infinity, -Infinity]) {
     assert.throws(
       () => account.recordTransaction("deposit", amount),
-      InvalidAmountError
+      InvalidAmountError,
     );
   }
   assert.equal(account.getBalance(), 0);
@@ -101,7 +104,7 @@ test("ring buffer stays in chronological order across multiple wraps", () => {
   const { transactions: history } = account.getTransactions();
   assert.deepEqual(
     history.map((tx) => tx.amount),
-    [6, 7]
+    [6, 7],
   );
   assert.equal(account.getBalance(), 28);
 });
@@ -116,7 +119,7 @@ test("rejects a description that is not a string, enforced by the account itself
   const account = new Account();
   assert.throws(
     () => account.recordTransaction("deposit", 10, 123 as unknown as string),
-    InvalidDescriptionError
+    InvalidDescriptionError,
   );
   assert.equal(account.getBalance(), 0);
 });
@@ -126,7 +129,7 @@ test("rejects a description longer than the configured max, enforced by the acco
 
   assert.throws(
     () => account.recordTransaction("deposit", 10, "123456"),
-    InvalidDescriptionError
+    InvalidDescriptionError,
   );
   assert.equal(account.getBalance(), 0);
 
@@ -150,7 +153,7 @@ test("reusing an idempotency key with different parameters is rejected", () => {
 
   assert.throws(
     () => account.recordTransaction("deposit", 50, "pay", "key-1"),
-    IdempotencyKeyConflictError
+    IdempotencyKeyConflictError,
   );
   assert.equal(account.getBalance(), 100);
   assert.equal(account.getTransactions().transactions.length, 1);
@@ -169,7 +172,7 @@ test("rejects an empty idempotency key", () => {
   const account = new Account();
   assert.throws(
     () => account.recordTransaction("deposit", 10, undefined, ""),
-    InvalidIdempotencyKeyError
+    InvalidIdempotencyKeyError,
   );
 });
 
@@ -193,7 +196,7 @@ test("getTransactions defaults to the first page, flagging when more are availab
   const page = account.getTransactions({ limit: 2 });
   assert.deepEqual(
     page.transactions.map((tx) => tx.amount),
-    [1, 2]
+    [1, 2],
   );
   assert.equal(page.hasMore, true);
 });
@@ -208,7 +211,7 @@ test("startingAfter resumes from the transaction after the given id", () => {
   const page = account.getTransactions({ limit: 2, startingAfter: first.id });
   assert.deepEqual(
     page.transactions.map((tx) => tx.amount),
-    [2, 3]
+    [2, 3],
   );
   assert.equal(page.hasMore, true);
 });
@@ -227,7 +230,7 @@ test("the last page reports hasMore as false", () => {
 
   assert.deepEqual(
     lastPage.transactions.map((tx) => tx.amount),
-    [3]
+    [3],
   );
   assert.equal(lastPage.hasMore, false);
 });
@@ -246,15 +249,15 @@ test("rejects a non-positive or non-integer limit", () => {
   const account = new Account();
   assert.throws(
     () => account.getTransactions({ limit: 0 }),
-    InvalidPaginationError
+    InvalidPaginationError,
   );
   assert.throws(
     () => account.getTransactions({ limit: -1 }),
-    InvalidPaginationError
+    InvalidPaginationError,
   );
   assert.throws(
     () => account.getTransactions({ limit: 1.5 }),
-    InvalidPaginationError
+    InvalidPaginationError,
   );
 });
 
@@ -264,7 +267,7 @@ test("rejects a startingAfter id that is not in history", () => {
 
   assert.throws(
     () => account.getTransactions({ startingAfter: "does-not-exist" }),
-    InvalidPaginationError
+    InvalidPaginationError,
   );
 });
 
@@ -276,7 +279,7 @@ test("a startingAfter id that has been evicted is rejected", () => {
 
   assert.throws(
     () => account.getTransactions({ startingAfter: first.id }),
-    InvalidPaginationError
+    InvalidPaginationError,
   );
 });
 
