@@ -99,9 +99,6 @@ Every error response uses the same envelope:
 { "error": "Withdrawal amount exceeds the available balance." }
 ```
 
-`code` is stable and safe to branch on; `message` is for humans and may
-change.
-
 ### `POST /accounts`
 
 Create an account with a zero balance. No request body.
