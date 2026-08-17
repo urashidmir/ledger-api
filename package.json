@@ -2,6 +2,9 @@
   "name": "simple-ledger-api",
   "version": "1.0.0",
   "description": "A simple in-memory ledger API (deposits, withdrawals, balance, transaction history)",
+  "engines": {
+    "node": ">=18"
+  },
   "main": "dist/index.js",
   "scripts": {
     "dev": "tsx watch src/index.ts",
