@@ -103,8 +103,7 @@ against them, check balances, and view transaction history. No UI — API only.
 
 ## Requirements
 
-- Node.js 18+ (the test suite uses the built-in `node:test` test runner,
-  available from Node 18)
+- Node.js 18+
 
 ## Running it
 
