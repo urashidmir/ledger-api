@@ -97,9 +97,14 @@ against them, check balances, and view transaction history. No UI — API only.
 - **Single-process only.** The "no concurrency control" decision above holds
   only because the balance read-modify-write is synchronous end-to-end.
   Swapping in a real datastore (see "No persistence" above) or running
-  multiple instances for scale/availability would put an `await` in that
-  path and reopen the interleaving window this design currently avoids —
-  either would need real locking or transactions to stay safe.
+  multiple instances for scale/availability would put an `await` in that path
+  and reopen the interleaving window this design currently avoids — but the
+  two aren't the same problem. Staying single-process with a real datastore
+  can be fixed cheaply with an in-process per-account lock (e.g. a promise
+  chain keyed by account id), since only one process ever touches that
+  account's memory. Running multiple instances removes that assumption — each
+  process has independent memory, so an in-process lock doesn't coordinate
+  across them — and needs real cross-process locking or transactions instead.
 
 ## Requirements
 
