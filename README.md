@@ -44,11 +44,7 @@ against them, check balances, and view transaction history. No UI — API only.
   account's running balance is tracked with `decimal.js` rather than a plain
   JS `number`, so deposits/withdrawals never accumulate IEEE-754 binary
   representation noise (e.g. `0.1 + 0.2` producing `0.30000000000000004`
-  instead of `0.3`) — there's no error to round away in the first place. An
-  earlier version of this rounded the balance to the nearest 1e-9 instead;
-  that broke silently for balances above ≈9,007,199 (`Math.round(x * 1e9)`
-  itself overflows `Number.MAX_SAFE_INTEGER`), so it was replaced rather
-  than patched.
+  instead of `0.3`) — there's no error to round away in the first place.
 - **No concurrency control.** Not needed here: the balance read-modify-write
   in `Account.recordTransaction()` — the overdraft check, the balance
   update, and the history append — is entirely synchronous, with no `await`
