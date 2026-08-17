@@ -96,7 +96,7 @@ npm test                      # test suite
 Every error response uses the same envelope:
 
 ```json
-{ "error": { "code": "INSUFFICIENT_FUNDS", "message": "Withdrawal amount exceeds the available balance." } }
+{ "error": { "message": "Withdrawal amount exceeds the available balance." } }
 ```
 
 `code` is stable and safe to branch on; `message` is for humans and may
